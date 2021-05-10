@@ -4,13 +4,27 @@
 # (╯‵□′)╯︵┻━┻
 # 图像匹配相关功能
 
-import pyscreeze
+#import pyscreeze
 import cv2
 import numpy as np
+import numpy.linalg as npl
 import win32gui, win32ui, win32con, win32api
+import os, time
 import ctypes
 
 
+g_orb = cv2.ORB_create()
+g_sift = cv2.SIFT_create()
+
+FLANN_INDEX_KDTREE = 1
+FLANN_INDEX_LSH = 6
+index_params = dict(algorithm = FLANN_INDEX_KDTREE, trees = 5)
+#index_params= dict(algorithm = FLANN_INDEX_LSH,
+#                   table_number = 6, # 12
+#                   key_size = 12,     # 20
+#                   multi_probe_level = 1) #2
+search_params = dict(checks=50)
+g_flann = cv2.FlannBasedMatcher(index_params, search_params)
 
 # find window hwnd by name
 def findMajWindow():
@@ -28,19 +42,19 @@ def findMajWindow():
         return foundHwnd[0]
     return None
 
-# screen shot browser window if found ; else capture full screen
-def scrshotMaj():
-    hwnd = findMajWindow()
-    if (hwnd == None):
-        print('can not find majsoul window')
-        return screenshot()
-    else:
-        return background_screenshot(hwnd)
-
-# capture full screen
-def screenshot():
-    img = pyscreeze.screenshot()
-    return np.asarray(img)[:, :, ::-1].copy()
+## screen shot browser window if found ; else capture full screen
+#def scrshotMaj():
+#    hwnd = findMajWindow()
+#    if (hwnd == None):
+#        print('can not find majsoul window')
+#        return screenshot()
+#    else:
+#        return background_screenshot(hwnd)
+#
+## capture full screen
+#def screenshot():
+#    img = pyscreeze.screenshot()
+#    return np.asarray(img)[:, :, ::-1].copy()
 
 # capture specific window
 def background_screenshot(hwnd):
@@ -113,9 +127,8 @@ def fitST_uni(xy, uv):
 # fit matrix xy -> uv  Scale & Translation
 def imgFitST(imgxy, imguv):
     # extract
-    sift = cv2.SIFT_create()
-    kp1, des1 = sift.detectAndCompute(imgxy, None)
-    kp2, des2 = sift.detectAndCompute(imguv, None)
+    kp1, des1 = g_sift.detectAndCompute(imgxy, None)
+    kp2, des2 = g_sift.detectAndCompute(imguv, None)
     kp1, des1 = filterKp(kp1, des1)
     kp2, des2 = filterKp(kp2, des2)
     # match
@@ -145,17 +158,11 @@ def filterKp(kp, des):
 
 def getGoodMatches(des1, des2, thr = 0.6):
     res = []
-    
-    FLANN_INDEX_KDTREE = 1
-    index_params = dict(algorithm = FLANN_INDEX_KDTREE, trees = 5)
-    search_params = dict(checks=50)
-    flann = cv2.FlannBasedMatcher(index_params, search_params)
-    
     flip = len(des1) > len(des2)
     if (flip):
-        matches = flann.knnMatch(des2, des1, k=2)
+        matches = g_flann.knnMatch(des2, des1, k=2)
     else:
-        matches = flann.knnMatch(des1, des2, k=2)
+        matches = g_flann.knnMatch(des1, des2, k=2)
     
     for match1, match2 in matches:
         score = match1.distance / match2.distance # 越小越好
@@ -169,6 +176,56 @@ def getGoodMatches(des1, des2, thr = 0.6):
         
     return res
 
+# match and delete bad points in loop
+def adaptiveMatchFitST_uni(kp1, des1, kp2, des2):
+    matches = g_flann.knnMatch(des1, des2, k=2)
+    matches.sort(key=lambda m:m[0].distance)
+    binSize = 500
+    binSizeMin = 400
+    
+    while(True):
+        matches_near = matches[:min(len(matches), binSize)]
+        print('[adaptiveMatchFitST_uni] total %s, pick %s' % (len(matches), len(matches_near)))
+        if (len(matches_near) < binSizeMin):
+            print('[adaptiveMatchFitST_uni] failed. too few remaining points before converge')
+            return None
+        
+        # fit
+        xy = []
+        uv = []
+        reperr = []
+        for i in range(len(matches_near)):
+            match1 = matches_near[i][0]
+            match2 = matches_near[i][1]
+            xy.append(kp1[match1.queryIdx].pt)
+            uv.append(kp2[match1.trainIdx].pt)
+        s2n = fitST_uni(xy, uv)
+        # reprojection
+        for i in range(len(matches_near)):
+            rep = np.matmul(s2n, [xy[i][0], xy[i][1], 1])[:2]
+            reperr.append(npl.norm(uv[i] -  rep))
+        mean = np.mean(reperr)
+        std = np.std(reperr)
+        print('[adaptiveMatchFitST_uni] mean %s std %s' % (mean, std))
+        if (mean < 1):
+            return s2n
+        # remove anomaly
+        matches_to_remove = []
+        for i in range(len(matches_near)):
+            matches_to_remove.append((matches_near[i], reperr[i]))
+        matches_to_remove.sort(key=lambda m:m[1], reverse=True)
+        rem_count = 0
+        for i in range(len(matches_near)):
+            if (matches_to_remove[i][1] > (mean * 3)):
+                matches.remove(matches_to_remove[i][0])
+                rem_count += 1
+        print('[adaptiveMatchFitST_uni] removed %s anomalies' % (rem_count))
+        if (rem_count == 0):
+            for i in range(30):
+                matches.remove(matches_to_remove[i][0])
+                rem_count += 1
+            print('[adaptiveMatchFitST_uni] removed %s extra points' % (rem_count))
+    
 
 # click without focus
 def clickInto(hwnd, x, y):
@@ -176,13 +233,17 @@ def clickInto(hwnd, x, y):
     win32api.PostMessage(hwnd, win32con.WM_LBUTTONDOWN, win32con.MK_LBUTTON, lParam)
     win32api.PostMessage(hwnd, win32con.WM_LBUTTONUP, None, lParam)
 
-
+def moveInto(hwnd, x, y):
+    lParam = win32api.MAKELONG(x, y)
+    win32api.PostMessage(hwnd, win32con.WM_MOUSEMOVE, None, lParam)
+    
 
 
 def ptint(pt):
     return (int(pt[0]), int(pt[1]))
 
-
+def v(*args):
+    return np.array(args, dtype=float)
 
 # normalized size
 nh = 720
@@ -191,38 +252,95 @@ nw = 1280
 # screen recognition
 class ScreenAgent:
     
-    def __init__(self):
+    def __init__(self, override = None):
         self.s2n = None
         self.n2s = None
-        self.sift = cv2.SIFT_create()
         self.hwnd = findMajWindow()
+        self.needUpdate = True
+        self.override = override
+        self.lastMousePos = v(0,0)
         assert self.hwnd != None, 'can not find majsoul window!'
+        
+        # templates
+        print('[ScreenAgent] building template keypoints')
+        kp = []
+        des = []
+        for fname in os.listdir('templates/multiple'):
+            fpath = 'templates/multiple/' + fname
+            template = cv2.imread(fpath)
+            if (np.any(template == None)):
+                continue
+            print(fpath)
+            kp_, des_ = g_sift.detectAndCompute(template, None)
+            kp_, des_ = filterKp(kp_, des_)
+            kp.append(kp_)
+            des.append(des_)
+        kp = np.concatenate(kp)
+        des = np.concatenate(des)
+        self.kp_template = kp
+        self.des_template = des
     
     # calibrate using main menu
     def calibrateMain(self):
-        template = cv2.imread('mainTemplate.png')
+        template = cv2.imread('templates/mainTemplate.png')
         template = cv2.resize(template, (nw, nh))
-        scr = background_screenshot(self.hwnd)
+        if (np.all(self.override != None)):
+            scr = self.override
+        else:
+            scr = background_screenshot(self.hwnd)
         
         self.s2n = imgFitST(scr, template)
         self.n2s = np.linalg.inv(self.s2n)
         
         print(self.s2n)
     
+    # calibrate using ingame view
+    def calibrateIngame(self):
+        template = cv2.imread('templates/05.png')
+        template = cv2.resize(template, (nw, nh))
+        if (np.all(self.override != None)):
+            scr = self.override
+        else:
+            scr = background_screenshot(self.hwnd)
+        
+        self.s2n = imgFitST(scr, template)
+        self.n2s = np.linalg.inv(self.s2n)
+        
+        print(self.s2n)
+    
+    # 多场景匹配
+    def calibrateMultiple(self):
+        # screen
+        if (np.all(self.override != None)):
+            scr = self.override
+        else:
+            scr = background_screenshot(self.hwnd)
+        kp_scr, des_scr = g_sift.detectAndCompute(scr, None)
+        kp_scr, des_scr = filterKp(kp_scr, des_scr)
+        # match & fit
+        self.s2n = adaptiveMatchFitST_uni(kp_scr, des_scr, self.kp_template, self.des_template)
+        self.n2s = np.linalg.inv(self.s2n)
+        print(self.s2n)
+    
     # capture and save to self.current
     def capture(self):
-        scr = background_screenshot(self.hwnd)
+        if (np.all(self.override != None)):
+            scr = self.override
+        else:
+            scr = background_screenshot(self.hwnd)
         self.current = cv2.warpAffine(scr, self.s2n[:2], (nw, nh))
-        self.kp, self.des = self.sift.detectAndCompute(self.current, None)
+        self.needUpdate = True
     
     # find patch in current capture
     def matchPatch(self, patch):
-        kp2, des2 = self.sift.detectAndCompute(patch, None)
+        kp2, des2 = g_sift.detectAndCompute(patch, None)
         kp2, des2 = filterKp(kp2, des2)
         return self.matchPatchKp(kp2, des2, patch.shape)
     
     # find patch in current capture(with keypoints)
     def matchPatchKp(self, kp, des, shape):
+        if (self.needUpdate):
+            self.kp, self.des = g_sift.detectAndCompute(self.current, None)
         matches = getGoodMatches(self.des, des)
         print('[matchPatchKp] kp1: %s kp2: %s best matches: %s' % (len(self.kp), len(kp), len(matches)))
         xy = []
@@ -240,9 +358,18 @@ class ScreenAgent:
     def click(self, uv):
         xy = np.matmul(self.n2s, [uv[0], uv[1], 1])[:2]
         clickInto(self.hwnd, int(xy[0]), int(xy[1]))
+        this.lastMousePos = xy
     
-
-
+    # move(normalized coordinates)
+    def moveSync(self, uv, steps=10, interval=0.05):
+        xy = np.matmul(self.n2s, [uv[0], uv[1], 1])[:2]
+        for i in range(steps):
+            t = i / steps
+            lerped = this.lastMousePos * (1 - t) + xy * t
+            moveInto(self.hwnd, int(lerped[0]), int(lerped[1]))
+            time.sleep(interval)
+        moveInto(self.hwnd, int(xy[0]), int(xy[1]))
+        this.lastMousePos = xy
 
 
 
