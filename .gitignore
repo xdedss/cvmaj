@@ -118,4 +118,5 @@ dmypy.json
 samples/*
 !samples/pack.zip
 !samples/readme.md
+save_temp
 
