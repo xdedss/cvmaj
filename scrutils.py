@@ -62,6 +62,10 @@ def background_screenshot(hwnd):
     left, top, right, bot = win32gui.GetWindowRect(hwnd)
     w = right - left
     h = bot - top
+    # in case there's DPI scaling
+    w *= 2
+    h *= 2
+    #print(left, top, right, bot)
 
     hwndDC = win32gui.GetWindowDC(hwnd)
     mfcDC  = win32ui.CreateDCFromHandle(hwndDC)
@@ -82,7 +86,7 @@ def background_screenshot(hwnd):
     img = np.fromstring(bmpstr, dtype='uint8')
     img.shape = (h, w, 4)
     #print(img.shape)
-    return img
+    return img[:, :, :3]
 
 # fit matrix xy -> uv  Scale & Translation
 def fitST(xy, uv):
@@ -294,20 +298,6 @@ class ScreenAgent:
         
         print(self.s2n)
     
-    # calibrate using ingame view
-    def calibrateIngame(self):
-        template = cv2.imread('templates/05.png')
-        template = cv2.resize(template, (nw, nh))
-        if (np.all(self.override != None)):
-            scr = self.override
-        else:
-            scr = background_screenshot(self.hwnd)
-        
-        self.s2n = imgFitST(scr, template)
-        self.n2s = np.linalg.inv(self.s2n)
-        
-        print(self.s2n)
-    
     # 多场景匹配
     def calibrateMultiple(self):
         # screen
@@ -329,6 +319,7 @@ class ScreenAgent:
         else:
             scr = background_screenshot(self.hwnd)
         self.current = cv2.warpAffine(scr, self.s2n[:2], (nw, nh))
+        self.raw = scr
         self.needUpdate = True
     
     # find patch in current capture

@@ -115,4 +115,7 @@ dmypy.json
 
 
 # samples
-samples/
+samples/*
+!samples/pack.zip
+!samples/readme.md
+
