@@ -1,1 +1,2 @@
 由于小文件过多，此文件夹内容打包成pack.zip上传github
+将pack.zip原地解压即可
