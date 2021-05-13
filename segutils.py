@@ -8,13 +8,19 @@ import math
 import cv2
 import numpy as np
 import numpy.linalg as npl
-import imutils
 
 tileBackColor = (220, 223, 223)
 tileBackColorInf = (215, 218, 218)
 tileSup = (225, 228, 228)
 
 horScanY = 640
+
+
+# verbose print
+verbose = False
+def vprint(*o):
+    if (verbose):
+        print(*o)
 
 def ptint(pt):
     return (int(pt[0]), int(pt[1]))
@@ -110,7 +116,7 @@ def findTileHor(img, startX, u, d):
             else:
                 hasBeenIn = True
     if (l == None or r == None):
-        #print('failed to find l or r (%s, %s)' % (l, r))
+        vprint('failed to find l or r (%s, %s)' % (l, r))
         return None
     return (l, r)
 
@@ -137,17 +143,17 @@ def findVerticalBorder(img, x):
 def extractTilesImg(img):
     r = findLeftMargin(img)
     u, d = findVerticalBorder(img, r + 30)
-    print('[extractTiles] left=%s u=%s d=%s' % (r, u, d))
+    vprint('[extractTiles] left=%s u=%s d=%s' % (r, u, d))
     res = []
     while (True):
         lr = findTileHor(img, r, u, d)
         if (lr == None):
-            print('[extractTiles] No more tiles')
+            vprint('[extractTiles] No more tiles')
             break
         
         l, r = lr
         u, d = findVerticalBorder(img, int((l + r) / 2))
-        print('[extractTiles] new tile %s ~ %s  %s ~ %s' % (l, r, u, d))
+        vprint('[extractTiles] new tile %s ~ %s  %s ~ %s' % (l, r, u, d))
         
         res.append((vint(l, u), vint(r, d), img[u:d, l:r]))
     if (len(res) == 0):
@@ -168,13 +174,13 @@ def extractCenterRegeon(img):
     size = 800
     mat = cv2.getPerspectiveTransform(v32(ulc, urc, blc, brc), 
         v32([0, 0], [size, 0], [0, size], [size, size]))
-    res = cv2.warpPerspective(img, mat, [size, size])
+    res = cv2.warpPerspective(img, mat, (size, size))
     return res
 
 # µ×É«·Ö¸î
 def tileBackRange(img):
     tol = 5
-    print(img.shape, (tileBackColor[0] - tol, tileBackColor[1] - tol, tileBackColor[2] - tol), (tileBackColor[0] + tol, tileBackColor[1] + tol, tileBackColor[2] + tol))
+    #print(img.shape, (tileBackColor[0] - tol, tileBackColor[1] - tol, tileBackColor[2] - tol), (tileBackColor[0] + tol, tileBackColor[1] + tol, tileBackColor[2] + tol))
     seg = cv2.inRange(img, 
         (tileBackColor[0] - tol, tileBackColor[1] - tol, tileBackColor[2] - tol), 
         (tileBackColor[0] + tol, tileBackColor[1] + tol, tileBackColor[2] + tol))
@@ -251,8 +257,7 @@ def extractPartTilesImg(img):
     img_seg = tileBackRange(img)
     edged = cv2.Canny(img_seg, 30, 200)
     contours, hierarchy = cv2.findContours(edged, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    #print(len(contours))
-    #print(hierarchy)
+    vprint('[extractPartTilesImg] found %s contours' % len(contours))
     contours_outer = []
     for i in range(len(contours)):
         if (hierarchy[0][i][3] == -1):
@@ -269,6 +274,7 @@ def extractPartTilesImg(img):
         else:
             #cv2.rectangle(canvas, [x, y], [x+w, y+h], (0, 255, 255), 1)
             pass
+    vprint('[extractPartTilesImg] %s candidates' % len(rect_candidates))
     
     # prior params
     p_width = 43 # ÅÆ¿í
@@ -287,11 +293,14 @@ def extractPartTilesImg(img):
     while (True):
         estBox= [cur, [cur[0]+p_width, cur[1]+p_height]]
         estBoxHor = [[cur[0], cur[1]+p_horsink], [cur[0]+p_height, cur[1]+p_width]]
+        vprint('[extractPartTilesImg] check est box %s %s' % (estBox, estBoxHor))
         bestBox, iou = getBestMatchBox(estBox, rect_candidates)
         bestBoxHor, iouHor = getBestMatchBox(estBoxHor, rect_candidates)
+        vprint('[extractPartTilesImg] matching box %s(%s) %s(%s)' % (bestBox, iou, bestBoxHor, iouHor))
         if (bestBox == None):
             if (cur[0] > p_maxX):
                 # try next line
+                vprint('[extractPartTilesImg] line break')
                 curLine += 1
                 if (curLine >= p_maxLine):
                     #oh no
@@ -299,11 +308,13 @@ def extractPartTilesImg(img):
                 cur = [p_start[0], p_start[1] + p_hinterval * curLine]
             else:
                 # maybe try next
+                vprint('[extractPartTilesImg] no luck, skipping tile')
                 cur = [cur[0] + p_winterval, cur[1]]
         else:
             # something is here
             if (iou > (iouHor-0.1)): # more likely to be vertical
                 #it might be vertical
+                vprint('[extractPartTilesImg] found vertical tile')
                 if (isInGoodShape(bestBox, p_width, p_height)):
                     rects.append((bestBox, iou))
                     cur = [bestBox[0][0] + p_winterval, bestBox[0][1]]
@@ -312,6 +323,7 @@ def extractPartTilesImg(img):
                     cur = [estBox[0][0] + p_winterval, estBox[0][1]]
             else:
                 #it might be horizontal
+                vprint('[extractPartTilesImg] found horizontal tile')
                 if (isInGoodShape(bestBoxHor, p_height, p_width)):
                     rects.append((bestBoxHor, iouHor))
                     cur = [bestBox[0][0] + p_wwinterval, bestBox[0][1] - p_horsink]
@@ -355,51 +367,12 @@ def extractCenterTilesImg(img):
     parts[3] = cv2.rotate(center[ulcorner[1]:ulcorner[1]+secW[3], ulcorner[0]-secH[3]:ulcorner[0]], cv2.ROTATE_90_COUNTERCLOCKWISE)
     
     tiles = []
-    for part in parts:
+    for i, part in enumerate(parts):
+        vprint('[extractCenterTilesImg] part %s' % i)
         tiles.append(extractPartTilesImg(part))
     return tiles
     
     
-#    center_seg = tileBackRange(center)
-#    center_seg_bl = cv2.GaussianBlur(center_seg, (9, 9), 4)
-#    center_seg_gx = cv2.Sobel(center_seg_bl, cv2.CV_32F, 1, 0)
-#    center_seg_gy = cv2.Sobel(center_seg_bl, cv2.CV_32F, 0, 1)
-#    center_seg_mag, center_seg_dir = cv2.cartToPolar(center_seg_gx, center_seg_gy)
-#    
-#    y1 = 122
-#    y2 = 230
-#    canvas = center.copy()
-##    for x in range(243, 573):
-##        if (checkEdge(center_seg_mag, center_seg_dir, [x, y1], [x, y2])):
-##            cv2.line(canvas, [x, y1], [x, y2], (0, 255, 0))
-##    
-#    
-#    for x in range(243, 573):
-#        for y in range(y1, y2):
-#            px_dir = center_seg_dir[y, x]
-#            px_mag = center_seg_mag[y, x]
-#            if ((angleSim(px_dir, np.pi, np.radians(30))) and (px_mag > 128)):
-#                canvas[y, x] = (0, 255, 0)
-#            if ((angleSim(px_dir, 0, np.radians(30))) and (px_mag > 128)):
-#                canvas[y, x] = (0, 0, 255)
-#        for y in range(539, 645):
-#            px_dir = center_seg_dir[y, x]
-#            px_mag = center_seg_mag[y, x]
-#            if ((angleSim(px_dir, np.pi, np.radians(30))) and (px_mag > 128)):
-#                canvas[y, x] = (0, 255, 0)
-#            if ((angleSim(px_dir, 0, np.radians(30))) and (px_mag > 128)):
-#                canvas[y, x] = (0, 0, 255)
-#            
-#    
-#    cv2.imshow('bl', center_seg_bl)
-#    cv2.imshow('gx', center_seg_gx/255)
-#    cv2.imshow('gy', center_seg_gy/255)
-#    cv2.imshow('mag', center_seg_mag/255)
-#    cv2.imshow('dir', center_seg_dir/6.28)
-#    cv2.imshow('canvas', canvas)
-#    cv2.waitKey()
-
-
 
 
 

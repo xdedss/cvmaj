@@ -19,6 +19,9 @@ import torch.optim
 import torch.utils.data
 import torchvision.transforms
 
+import cv2
+import numpy as np
+
 # m
 import models, dataset
 
@@ -292,6 +295,27 @@ def accuracy(output, target, topk=(1,)):
         res.append(correct_k.mul_(100.0 / batch_size))
     return res
 
+# 返回预测函数 (预测函数：传入图像list，返回名称list)
+def loadModel(path):
+    state_dict = torch.load(path)['state_dict']
+    model = models.ConvClassifier()
+    model.load_state_dict(state_dict)
+    model.cpu()
+    model.eval()
+    def infer(images):
+        if (len(images) == 0):
+            return []
+        data = torch.zeros((len(images), 3, 32, 32))
+        for i, img in enumerate(images):
+            img = cv2.resize(img, (32, 32)) 
+            data[i] = torch.from_numpy(np.transpose(img.astype(np.float32), axes=[2, 0, 1]) / 255)
+        #print(data.shape)
+        res = model(data)
+        #print(res.shape)
+        res = torch.argmax(res, dim=1)
+        res = [dataset.index2name(t.item()) for t in res]
+        return res
+    return infer
 
 if __name__ == '__main__':
     main()

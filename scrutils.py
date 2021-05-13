@@ -263,7 +263,8 @@ class ScreenAgent:
         self.needUpdate = True
         self.override = override
         self.lastMousePos = v(0,0)
-        assert self.hwnd != None, 'can not find majsoul window!'
+        if (override is None):
+            assert self.hwnd != None, 'can not find majsoul window!'
         
         # templates
         print('[ScreenAgent] building template keypoints')

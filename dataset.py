@@ -31,7 +31,7 @@ def name2index(name):
     raise Exception('no such name: %s' % name)
 
 def index2name(index):
-    if index > 0 and index < len(i2s):
+    if index >= 0 and index < len(i2s):
         return i2s[index]
     raise Exception('index out of range: %d' % index)
 
