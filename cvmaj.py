@@ -6,13 +6,25 @@
 import cv2
 import numpy as np
 import numpy.linalg as npl
-import time, os
+import time, os, sys
 import traceback
 
 # m
 import scrutils
 import segutils
 import visionutils
+
+
+def mkdirIfNotExists(dirs):
+    for d in dirs:
+        if (not os.path.exists(d)):
+            os.makedirs(d)
+
+class MajInfo:
+    def __init__(self):
+        self.hand = None # 手牌
+        self.discard = None # 打出的牌
+        
 
 
 def scrapData():
@@ -92,6 +104,25 @@ def offlineTest():
             traceback.print_exc()
 
 
+def clickTest():
+    agent = scrutils.ScreenAgent()
+    agent.calibrateMultiple()
+    agent.capture()
+#    cv2.imshow('test', agent.current)
+#    cv2.waitKey()
+    while (True):
+        x = int(input())
+        y = int(input())
+        print('clicking %s, %s' % (x, y))
+        
+        center = (x, y)
+        agent.moveSync(center)
+        time.sleep(0.3)
+        agent.click(center)
+        time.sleep(0.3)
+        agent.moveSync([0, 0])
+    
+
 def onlineTest():
     classifier = visionutils.loadModel('pretrained.tar')
     agent = scrutils.ScreenAgent()
@@ -126,9 +157,125 @@ def onlineTest():
             print('error')
             traceback.print_exc()
 
+
+def runAI(moduleName):
+    m = __import__(moduleName, fromlist=[''])    
+    if (not('discard' in dir(m) and 'action' in dir(m))):
+        raise Exception('missing  implementation')
+    
+    classifier = visionutils.loadModel('pretrained.tar')
+    agent = scrutils.ScreenAgent()
+    agent.calibrateMultiple()
+    
+    input('按回车开始运行...')
+    
+    while (True):
+        time.sleep(1)
+        agent.capture()
+        
+        try:
+            print('牌河')
+            table = segutils.extractCenterTilesImg(agent.current)
+            tablePred = []
+            for part in table:
+                partPred = classifier([img for start, end, img in part])
+                tablePred.append(partPred)
+                print(partPred)
+            
+            tiles = segutils.extractTilesImg(agent.current)
+            pred = classifier([img for start, end, img in tiles])
+            print('手牌识别')
+            print(pred)
+            
+            
+            info = MajInfo()
+            info.hand = pred
+            info.discard = tablePred
+            if (len(pred) % 3 == 2):
+                action = segutils.extractActions(agent.current)
+                if (action is None):
+                    print('no action')
+                    # 该出牌了
+                    print('Consulting AI for discard')
+                    discardIndex = m.discard(info)
+                    if (discardIndex is None):
+                        print('discard nothing')
+                    else:
+                        discardIndex = int(discardIndex) 
+                        print('discard %d' % discardIndex)
+                        assert discardIndex >= 0 and discardIndex < len(pred), 'discard index out of range'
+                        start, end, img = tiles[discardIndex]
+                        center = (start + end) // 2
+                        agent.moveSync(center)
+                        time.sleep(0.1)
+                        agent.click(center)
+                        time.sleep(0.1)
+                        agent.moveSync([0, 0])
+                else:
+                    print('action: %s' % action)
+                    # 立直/和
+                    print('Consulting AI for action')
+                    actionResult = m.action(info, action)
+                    if (actionResult is None):
+                        print('do nothing')
+                    elif (actionResult):
+                        print('YES')
+                        agent.click([694, 558])
+                        time.sleep(0.1)
+                        agent.moveSync([0, 0])
+                    else:
+                        print('NOOOO')
+                        agent.click([873, 558])
+                        time.sleep(0.1)
+                        agent.moveSync([0, 0])
+                
+            else:
+                action = segutils.extractActions(agent.current)
+                if (action is None):
+                    print('no action')
+                else:
+                    print('action: %s' % action)
+                    # 碰吃杠
+                    print('Consulting AI for action')
+                    actionResult = m.action(info, action)
+                    if (actionResult is None):
+                        print('do nothing')
+                    elif (actionResult):
+                        print('YES')
+                        agent.click([694, 558])
+                        time.sleep(0.1)
+                        agent.moveSync([0, 0])
+                    else:
+                        print('NOOOO')
+                        agent.click([873, 558])
+                        time.sleep(0.1)
+                        agent.moveSync([0, 0])
+                
+            
+        except Exception as e:
+            outpath = 'samples/error/%.3f.png' % (time.time())
+            outpathscr = 'samples/error/%.3f_scr.png' % (time.time())
+            cv2.imwrite(outpath, agent.current)
+            cv2.imwrite(outpathscr, agent.raw)
+            print('error')
+            traceback.print_exc()
+    
+    
+
+
 if __name__ == '__main__':
     
-    onlineTest()
-    #offlineTest()
+    mkdirIfNotExists([
+    'samples/error'
+    ])
     
+    if (len(sys.argv > 1)):
+        runAI('ai.' + sys.argv[1])
+    else:
+        #onlineTest()
+        #offlineTest()
+        
+        #clickTest()
+        pass
+        
     
