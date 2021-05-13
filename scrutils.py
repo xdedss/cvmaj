@@ -13,6 +13,11 @@ import os, time
 import ctypes
 
 
+# tell windows i'm dpi aware
+PROCESS_PER_MONITOR_DPI_AWARE = 2
+ctypes.windll.shcore.SetProcessDpiAwareness(PROCESS_PER_MONITOR_DPI_AWARE)
+
+
 g_orb = cv2.ORB_create()
 g_sift = cv2.SIFT_create()
 
@@ -60,12 +65,12 @@ def findMajWindow():
 def background_screenshot(hwnd):
     #left, top, right, bot = win32gui.GetClientRect(hwnd)
     left, top, right, bot = win32gui.GetWindowRect(hwnd)
+    print('window location', left, top, right, bot)
     w = right - left
     h = bot - top
-    # in case there's DPI scaling
-    w *= 2
-    h *= 2
-    #print(left, top, right, bot)
+#    # in case there's DPI scaling
+#    w *= 2
+#    h *= 2
 
     hwndDC = win32gui.GetWindowDC(hwnd)
     mfcDC  = win32ui.CreateDCFromHandle(hwndDC)
@@ -235,7 +240,10 @@ def adaptiveMatchFitST_uni(kp1, des1, kp2, des2):
 def clickInto(hwnd, x, y):
     lParam = win32api.MAKELONG(x, y)
     win32api.PostMessage(hwnd, win32con.WM_LBUTTONDOWN, win32con.MK_LBUTTON, lParam)
+    print('ldown')
+    time.sleep(0.1)
     win32api.PostMessage(hwnd, win32con.WM_LBUTTONUP, None, lParam)
+    print('lup')
 
 def moveInto(hwnd, x, y):
     lParam = win32api.MAKELONG(x, y)
@@ -350,18 +358,19 @@ class ScreenAgent:
     def click(self, uv):
         xy = np.matmul(self.n2s, [uv[0], uv[1], 1])[:2]
         clickInto(self.hwnd, int(xy[0]), int(xy[1]))
-        this.lastMousePos = xy
+        self.lastMousePos = xy
     
     # move(normalized coordinates)
-    def moveSync(self, uv, steps=10, interval=0.05):
+    def moveSync(self, uv, steps=10, total_time=0.3):
+        interval = total_time / steps
         xy = np.matmul(self.n2s, [uv[0], uv[1], 1])[:2]
         for i in range(steps):
             t = i / steps
-            lerped = this.lastMousePos * (1 - t) + xy * t
+            lerped = self.lastMousePos * (1 - t) + xy * t
             moveInto(self.hwnd, int(lerped[0]), int(lerped[1]))
             time.sleep(interval)
         moveInto(self.hwnd, int(xy[0]), int(xy[1]))
-        this.lastMousePos = xy
+        self.lastMousePos = xy
 
 
 

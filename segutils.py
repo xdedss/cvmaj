@@ -1,8 +1,8 @@
 
 
-# (¨s¨F¡õ¡ä)¨s¦à©ß©¥©ß
+# (â•¯â€µâ–¡â€²)â•¯ï¸µâ”»â”â”»
 
-# »­Ãæ·Ö¸î
+# ç”»é¢åˆ†å‰²
 
 import math
 import cv2
@@ -65,7 +65,10 @@ def colorSim(c1, c2, thr):
 def colorLess(c1, c2):
     return (c1[0] < c2[0] and c1[1] < c2[1] and c1[2] < c2[2])
 
-# ÅÆÖ®¼äµÄ·ì
+# --------------------------------æ‰‹ç‰Œ--------------------------------------
+
+
+# ç‰Œä¹‹é—´çš„ç¼
 def isTileGap(img, x, u, d, tol=10):
     for y in range(u, d, 3):
         pixel = img[y, x]
@@ -73,11 +76,11 @@ def isTileGap(img, x, u, d, tol=10):
             return False
     return True
 
-# ÅÆµ×É«
+# ç‰Œåº•è‰²
 def isTileBack(c, tol=10):
     return colorSim(c, tileBackColor, 10) or colorLess(tileSup, c)
 
-# ¶¨Î»×î×óÅÆ
+# å®šä½æœ€å·¦ç‰Œ
 def findLeftMargin(img):
     res = None
     for x in range(140, 180):
@@ -85,12 +88,12 @@ def findLeftMargin(img):
         if (colorSim(pixel, tileBackColor, 10)):
             res = x
             break
-    if (x == None):
+    if (res == None):
         print('failed to find left margin')
         raise Exception('can not find left margin')
     return res
 
-# ¶¨Î»ÕûÕÅÅÆ×óÓÒ±ß½ç
+# å®šä½æ•´å¼ ç‰Œå·¦å³è¾¹ç•Œ
 def findTileHor(img, startX, u, d):
     l = None
     r = None
@@ -120,7 +123,7 @@ def findTileHor(img, startX, u, d):
         return None
     return (l, r)
 
-# ¶¨Î»ÅÆÉÏÏÂ±ß½ç
+# å®šä½ç‰Œä¸Šä¸‹è¾¹ç•Œ
 def findVerticalBorder(img, x):
     u = None
     d = None
@@ -139,7 +142,7 @@ def findVerticalBorder(img, x):
         raise Exception('can not find vertical border')
     return (u, d)
 
-# ´ÓÈ«Í¼ÌáÈ¡×Ô¼ºµÄÅÆ
+# ä»å…¨å›¾æå–è‡ªå·±çš„ç‰Œ
 def extractTilesImg(img):
     r = findLeftMargin(img)
     u, d = findVerticalBorder(img, r + 30)
@@ -165,7 +168,12 @@ def wrapPers(m, xy):
     uv /= uv[2]
     return uv[:2]
 
-# ÖĞ¼äÇøÓòÍ¸ÊÓĞ£Õı
+
+
+# --------------------------------ç‰Œæ²³-------------------------------------
+
+
+# ä¸­é—´åŒºåŸŸé€è§†æ ¡æ­£
 def extractCenterRegeon(img):
     ulc = [349, 81]
     urc = [932, 81]
@@ -177,7 +185,7 @@ def extractCenterRegeon(img):
     res = cv2.warpPerspective(img, mat, (size, size))
     return res
 
-# µ×É«·Ö¸î
+# åº•è‰²åˆ†å‰²
 def tileBackRange(img):
     tol = 5
     #print(img.shape, (tileBackColor[0] - tol, tileBackColor[1] - tol, tileBackColor[2] - tol), (tileBackColor[0] + tol, tileBackColor[1] + tol, tileBackColor[2] + tol))
@@ -190,11 +198,11 @@ def tileBackRange(img):
     #res = cv2.GaussianBlur(res, (5, 5), 3)
     return res
 
-## Ë«Ïò²»µÈ¼ÛµÄ½Ç¶È±È½Ï
+## åŒå‘ä¸ç­‰ä»·çš„è§’åº¦æ¯”è¾ƒ
 #def angleSim(a1, a2, thr = 10 / 180 * np.pi):
 #    return abs((a1 - a2 + np.pi) % (2 * np.pi) - np.pi) < thr
 #
-## Ë«ÏòµÈ¼ÛµÄ½Ç¶È±È½Ï
+## åŒå‘ç­‰ä»·çš„è§’åº¦æ¯”è¾ƒ
 #def angleSim2(a1, a2, thr = 10 / 180.0 * np.pi):
 #    return abs((a1 - a2 + np.pi/2) % np.pi - np.pi/2) < thr
 #
@@ -252,7 +260,7 @@ def isInGoodShape(box, p_width, p_height):
         return False
     return True
 
-# Ò»¼ÒµÄ´ò³öµÄÅÆ
+# ä¸€å®¶çš„æ‰“å‡ºçš„ç‰Œ
 def extractPartTilesImg(img):
     img_seg = tileBackRange(img)
     edged = cv2.Canny(img_seg, 30, 200)
@@ -263,7 +271,7 @@ def extractPartTilesImg(img):
         if (hierarchy[0][i][3] == -1):
             contours_outer.append(contours[i])
     
-    # ´ÖÉ¸
+    # ç²—ç­›
     #canvas = img.copy()
     rect_candidates = []
     for contour in contours_outer:
@@ -277,12 +285,12 @@ def extractPartTilesImg(img):
     vprint('[extractPartTilesImg] %s candidates' % len(rect_candidates))
     
     # prior params
-    p_width = 43 # ÅÆ¿í
-    p_height = 56 # ÅÆ¸ß
-    p_winterval = 46 # ÊúÖ±°Ú·ÅµÄË®Æ½¼ä¸ô
-    p_wwinterval = 61 # Ë®Æ½°Ú·ÅµÄË®Æ½¼ä¸ô
-    p_hinterval = 62 # ÊúÖ±°Ú·ÅµÄÊúÖ±¼ä¸ô
-    p_horsink = 6 # Ë®Æ½°Ú·ÅµÄ¸ß¶È²î
+    p_width = 43 # ç‰Œå®½
+    p_height = 56 # ç‰Œé«˜
+    p_winterval = 46 # ç«–ç›´æ‘†æ”¾çš„æ°´å¹³é—´éš”
+    p_wwinterval = 61 # æ°´å¹³æ‘†æ”¾çš„æ°´å¹³é—´éš”
+    p_hinterval = 62 # ç«–ç›´æ‘†æ”¾çš„ç«–ç›´é—´éš”
+    p_horsink = 6 # æ°´å¹³æ‘†æ”¾çš„é«˜åº¦å·®
     p_start = [10, 10] 
     p_maxX = 260 # maximum line length
     p_maxLine = 3 # maximum line num
@@ -349,7 +357,7 @@ def extractPartTilesImg(img):
     
     return res
 
-# ´ÓÈ«Í¼ÌáÈ¡
+# ä»å…¨å›¾æå–
 def extractCenterTilesImg(img):
     # extract center region
     center = extractCenterRegeon(img)
@@ -374,6 +382,76 @@ def extractCenterTilesImg(img):
     
     
 
+# --------------------------------å…¶ä»–æ‚é¡¹--------------------------------------
 
 
+
+
+
+def testRange(img):
+    img = img[353:410, 434:567]
+        
+        
+    num_pixel = img.shape[0] * img.shape[1]
+    hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+    
+    kernel = np.ones((5,5),np.uint8)
+    chii_range = cv2.morphologyEx(cv2.inRange(hsv, (75, 50, 50), (83, 255, 255)), cv2.MORPH_OPEN, kernel)
+    pon_range = cv2.morphologyEx(cv2.inRange(hsv, (97, 50, 50), (100, 255, 255)), cv2.MORPH_OPEN, kernel)
+    kan_range = cv2.morphologyEx(cv2.inRange(hsv, (150, 50, 50), (155, 255, 255)), cv2.MORPH_OPEN, kernel)
+    ron_range = cv2.morphologyEx(cv2.bitwise_or(
+        cv2.inRange(hsv, (0, 50, 50), (2, 255, 255)),
+        cv2.inRange(hsv, (178, 50, 50), (180, 255, 255))  ), cv2.MORPH_OPEN, kernel)
+    riichi_range = cv2.morphologyEx(cv2.inRange(hsv, (10, 50, 50), (14, 255, 255)), cv2.MORPH_OPEN, kernel)
+    
+    chii_ratio = np.sum(chii_range) / 255.0 / num_pixel
+    pon_ratio = np.sum(pon_range) / 255.0 / num_pixel
+    kan_ratio = np.sum(kan_range) / 255.0 / num_pixel
+    ron_ratio = np.sum(ron_range) / 255.0 / num_pixel
+    riichi_ratio = np.sum(riichi_range) / 255.0 / num_pixel
+    
+    
+    cv2.imshow('chii', chii_range)
+    cv2.imshow('pon', pon_range)
+    cv2.imshow('kan', kan_range)
+    cv2.imshow('ron', ron_range)
+    cv2.imshow('riichi', riichi_range)
+    
+    print(chii_ratio, pon_ratio, kan_ratio, ron_ratio, riichi_ratio)
+    
+    cv2.waitKey()
+
+
+# ç¢°åƒæ ç«‹ç›´å’Œ
+def extractActions(img):
+    actionROI = img[527:527+58, 614:614+164]
+    
+    num_pixel = actionROI.shape[0] * actionROI.shape[1]
+    hsv = cv2.cvtColor(actionROI, cv2.COLOR_BGR2HSV)
+    
+    kernel = np.ones((5,5),np.uint8)
+    chii_range = cv2.morphologyEx(cv2.inRange(hsv, (75, 50, 50), (83, 255, 255)), cv2.MORPH_OPEN, kernel)
+    pon_range = cv2.morphologyEx(cv2.inRange(hsv, (97, 50, 50), (100, 255, 255)), cv2.MORPH_OPEN, kernel)
+    kan_range = cv2.morphologyEx(cv2.inRange(hsv, (150, 50, 50), (155, 255, 255)), cv2.MORPH_OPEN, kernel)
+    ron_range = cv2.morphologyEx(cv2.bitwise_or(
+        cv2.inRange(hsv, (0, 50, 50), (2, 255, 255)),
+        cv2.inRange(hsv, (178, 50, 50), (180, 255, 255))  ), cv2.MORPH_OPEN, kernel)
+    riichi_range = cv2.morphologyEx(cv2.inRange(hsv, (10, 50, 50), (14, 255, 255)), cv2.MORPH_OPEN, kernel)
+    tsumo_range = cv2.morphologyEx(cv2.inRange(hsv, (124, 50, 50), (127, 255, 255)), cv2.MORPH_OPEN, kernel)
+    
+    action_names = ['chii', 'pon', 'kan', 'ron', 'riichi', 'tsumo']
+    action_ratio = [
+        np.sum(chii_range) / 255.0 / num_pixel,
+        np.sum(pon_range) / 255.0 / num_pixel,
+        np.sum(kan_range) / 255.0 / num_pixel,
+        np.sum(ron_range) / 255.0 / num_pixel,
+        np.sum(riichi_range) / 255.0 / num_pixel,
+        np.sum(tsumo_range) / 255.0 / num_pixel
+    ]
+    print(action_ratio)
+    action_idx = np.argmax(action_ratio)
+    if (action_ratio[action_idx] < 0.06):
+        return None
+    return action_names[action_idx]
+    
 
