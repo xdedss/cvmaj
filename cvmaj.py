@@ -269,7 +269,7 @@ if __name__ == '__main__':
     'samples/error'
     ])
     
-    if (len(sys.argv > 1)):
+    if (len(sys.argv) > 1):
         runAI('ai.' + sys.argv[1])
     else:
         #onlineTest()
